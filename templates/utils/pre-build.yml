@@ -1,0 +1,227 @@
+name: pre-build orchestrator
+
+on:
+  workflow_call:
+    inputs:
+      service_name:
+        required: true
+        type: string
+      project_type:
+        required: true
+        type: string
+      image_output_dir:
+        required: false
+        type: string
+        default: /var/lib/iot-agent/images
+      chart_type:
+        required: false
+        type: string
+        default: deployment
+      environment:
+        required: false
+        type: string
+        default: dev
+      namespace:
+        required: false
+        type: string
+        default: iot-agent
+      values_file:
+        required: false
+        type: string
+        default: Helm/dev.yaml
+      docker_context:
+        required: false
+        type: string
+        default: .
+      dockerfile:
+        required: false
+        type: string
+        default: Dockerfile
+      working_directory:
+        required: false
+        type: string
+        default: .
+      release_name:
+        required: false
+        type: string
+        default: ""
+      image_tag:
+        required: false
+        type: string
+        default: ""
+      java_version:
+        required: false
+        type: string
+        default: "21"
+      node_version:
+        required: false
+        type: string
+        default: "20"
+      maven_args:
+        required: false
+        type: string
+        default: "-B clean package -DskipTests"
+      node_install_command:
+        required: false
+        type: string
+        default: "npm ci"
+      node_build_command:
+        required: false
+        type: string
+        default: "npm run build"
+      store_image_locally:
+        required: false
+        type: boolean
+        default: true
+      import_to_k3s:
+        required: false
+        type: boolean
+        default: true
+      deploy:
+        required: false
+        type: boolean
+        default: true
+      kubeconfig:
+        required: false
+        type: string
+        default: /etc/rancher/k3s/k3s.yaml
+
+env:
+  DOCKER_BUILDKIT: 1
+
+jobs:
+  prepare:
+    name: Prepare variables and validate inputs
+    runs-on: self-hosted
+    outputs:
+      release_name: ${{ steps.validate.outputs.release_name }}
+      image_repository: ${{ steps.validate.outputs.image_repository }}
+      image_tag: ${{ steps.validate.outputs.image_tag }}
+      values_file: ${{ steps.validate.outputs.values_file }}
+      dockerfile: ${{ steps.validate.outputs.dockerfile }}
+      docker_context: ${{ steps.validate.outputs.docker_context }}
+      working_directory: ${{ steps.validate.outputs.working_directory }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Validate pipeline inputs
+        id: validate
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          case "${{ inputs.project_type }}" in
+            maven|node) ;;
+            *)
+              echo "Unsupported project_type: ${{ inputs.project_type }}"
+              exit 1
+              ;;
+          esac
+
+          case "${{ inputs.chart_type }}" in
+            deployment|statefulset|cronjob|cronjob-multi|argo-cronjob) ;;
+            *)
+              echo "Unsupported chart_type: ${{ inputs.chart_type }}"
+              exit 1
+              ;;
+          esac
+
+          if [[ ! -f "${{ inputs.values_file }}" ]]; then
+            echo "Missing Helm values file: ${{ inputs.values_file }}"
+            exit 1
+          fi
+
+          if [[ ! -f "${{ inputs.dockerfile }}" ]]; then
+            echo "Missing Dockerfile: ${{ inputs.dockerfile }}"
+            exit 1
+          fi
+
+          if [[ "${{ inputs.project_type }}" == "maven" && ! -f "${{ inputs.working_directory }}/pom.xml" ]]; then
+            echo "pom.xml not found in ${{ inputs.working_directory }}"
+            exit 1
+          fi
+
+          if [[ "${{ inputs.project_type }}" == "node" && ! -f "${{ inputs.working_directory }}/package.json" ]]; then
+            echo "package.json not found in ${{ inputs.working_directory }}"
+            exit 1
+          fi
+
+          short_sha="${GITHUB_SHA::12}"
+          resolved_tag="${{ inputs.image_tag }}"
+          if [[ -z "$resolved_tag" ]]; then
+            resolved_tag="$short_sha"
+          fi
+
+          resolved_release="${{ inputs.release_name }}"
+          if [[ -z "$resolved_release" ]]; then
+            resolved_release="${{ inputs.service_name }}"
+          fi
+
+          mkdir -p "${{ inputs.image_output_dir }}"
+
+          resolved_repo="${{ inputs.service_name }}"
+
+          echo "release_name=$resolved_release" >> "$GITHUB_OUTPUT"
+          echo "image_repository=$resolved_repo" >> "$GITHUB_OUTPUT"
+          echo "image_tag=$resolved_tag" >> "$GITHUB_OUTPUT"
+          echo "values_file=${{ inputs.values_file }}" >> "$GITHUB_OUTPUT"
+          echo "dockerfile=${{ inputs.dockerfile }}" >> "$GITHUB_OUTPUT"
+          echo "docker_context=${{ inputs.docker_context }}" >> "$GITHUB_OUTPUT"
+          echo "working_directory=${{ inputs.working_directory }}" >> "$GITHUB_OUTPUT"
+
+  maven-build:
+    name: Maven build
+    needs: prepare
+    if: ${{ inputs.project_type == 'maven' }}
+    uses: ./.github/workflows/maven-build.yml
+    with:
+      java_version: ${{ inputs.java_version }}
+      maven_args: ${{ inputs.maven_args }}
+      working_directory: ${{ needs.prepare.outputs.working_directory }}
+
+  node-build:
+    name: Node build
+    needs: prepare
+    if: ${{ inputs.project_type == 'node' }}
+    uses: ./.github/workflows/node-build.yml
+    with:
+      node_version: ${{ inputs.node_version }}
+      install_command: ${{ inputs.node_install_command }}
+      build_command: ${{ inputs.node_build_command }}
+      working_directory: ${{ needs.prepare.outputs.working_directory }}
+
+  docker-image:
+    name: Build and push image
+    needs:
+      - prepare
+      - maven-build
+      - node-build
+    if: ${{ always() && needs.prepare.result == 'success' && (needs.maven-build.result == 'success' || needs.maven-build.result == 'skipped') && (needs.node-build.result == 'success' || needs.node-build.result == 'skipped') }}
+    uses: ./.github/workflows/docker.yml
+    with:
+      image_repository: ${{ needs.prepare.outputs.image_repository }}
+      image_tag: ${{ needs.prepare.outputs.image_tag }}
+      docker_context: ${{ needs.prepare.outputs.docker_context }}
+      dockerfile: ${{ needs.prepare.outputs.dockerfile }}
+      image_output_dir: ${{ inputs.image_output_dir }}
+      store_image_locally: ${{ inputs.store_image_locally }}
+      import_to_k3s: ${{ inputs.import_to_k3s }}
+
+  helm-deploy:
+    name: Deploy to local k3s
+    needs:
+      - prepare
+      - docker-image
+    if: ${{ inputs.deploy && needs.docker-image.result == 'success' }}
+    uses: ./.github/workflows/helm.yml
+    with:
+      service_name: ${{ inputs.service_name }}
+      release_name: ${{ needs.prepare.outputs.release_name }}
+      namespace: ${{ inputs.namespace }}
+      chart_type: ${{ inputs.chart_type }}
+      values_file: ${{ needs.prepare.outputs.values_file }}
+      image_repository: ${{ needs.prepare.outputs.image_repository }}
+      image_tag: ${{ needs.prepare.outputs.image_tag }}
+      kubeconfig: ${{ inputs.kubeconfig }}
+    secrets: inherit
