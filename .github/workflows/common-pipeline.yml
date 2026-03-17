@@ -114,7 +114,14 @@ jobs:
 
       - name: Import into k3s
         shell: bash
-        run: sudo k3s ctr images import "${IMAGE_OUTPUT_DIR}/${{ inputs.service_name }}_${{ steps.meta.outputs.tag }}.tar"
+        run: |
+          set -euo pipefail
+          archive="${IMAGE_OUTPUT_DIR}/${{ inputs.service_name }}_${{ steps.meta.outputs.tag }}.tar"
+          if k3s ctr images import "$archive" >/dev/null 2>&1; then
+            k3s ctr images import "$archive"
+          else
+            sudo -n k3s ctr images import "$archive"
+          fi
 
   deploy:
     name: Helm deploy
