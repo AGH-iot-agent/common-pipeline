@@ -37,7 +37,7 @@ on:
 
 env:
   DOCKER_BUILDKIT: "1"
-  IMAGE_OUTPUT_DIR: /mnt/storage/iot-agent/images
+  IMAGE_OUTPUT_DIR: /mnt/storage/iot-agent/docker-local
   KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
 jobs:
@@ -108,15 +108,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          archive="${IMAGE_OUTPUT_DIR}/${{ inputs.service_name }}_${{ steps.meta.outputs.tag }}.tar"
-          mkdir -p "$IMAGE_OUTPUT_DIR"
+          archive_dir="${IMAGE_OUTPUT_DIR}/${{ inputs.service_name }}"
+          archive="${archive_dir}/${{ inputs.service_name }}_${{ steps.meta.outputs.tag }}.tar"
+          mkdir -p "$archive_dir"
           docker save -o "$archive" "${{ inputs.service_name }}:${{ steps.meta.outputs.tag }}"
 
       - name: Import into k3s
         shell: bash
         run: |
           set -euo pipefail
-          archive="${IMAGE_OUTPUT_DIR}/${{ inputs.service_name }}_${{ steps.meta.outputs.tag }}.tar"
+          archive="${IMAGE_OUTPUT_DIR}/${{ inputs.service_name }}/${{ inputs.service_name }}_${{ steps.meta.outputs.tag }}.tar"
           if /usr/local/bin/k3s ctr images ls >/dev/null 2>&1; then
             /usr/local/bin/k3s ctr images import "$archive"
           elif sudo -n /usr/local/bin/k3s ctr images ls >/dev/null 2>&1; then
