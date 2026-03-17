@@ -1,0 +1,139 @@
+name: Common Pipeline
+
+on:
+  workflow_call:
+    inputs:
+      service_name:
+        required: true
+        type: string
+      project_type:
+        required: true
+        type: string
+        # maven | node
+      values_file:
+        required: false
+        type: string
+        default: Helm/dev.yaml
+      chart_type:
+        required: false
+        type: string
+        default: deployment
+      namespace:
+        required: false
+        type: string
+        default: iot-agent
+      java_version:
+        required: false
+        type: string
+        default: "21"
+      node_version:
+        required: false
+        type: string
+        default: "20"
+      deploy:
+        required: false
+        type: boolean
+        default: true
+
+env:
+  DOCKER_BUILDKIT: "1"
+  IMAGE_OUTPUT_DIR: /var/lib/iot-agent/images
+  KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+jobs:
+  build:
+    name: Build
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        if: ${{ inputs.project_type == 'maven' }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ inputs.java_version }}
+          cache: maven
+
+      - name: Maven build
+        if: ${{ inputs.project_type == 'maven' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f ./mvnw ]]; then
+            chmod +x ./mvnw && ./mvnw -B clean package -DskipTests
+          else
+            mvn -B clean package -DskipTests
+          fi
+
+      - name: Set up Node.js
+        if: ${{ inputs.project_type == 'node' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: npm
+
+      - name: Node build
+        if: ${{ inputs.project_type == 'node' }}
+        shell: bash
+        run: npm ci && npm run build
+
+  docker:
+    name: Docker build & store
+    runs-on: self-hosted
+    needs: build
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set image tag
+        id: meta
+        shell: bash
+        run: echo "tag=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+
+      - name: Build image
+        shell: bash
+        run: docker build -t "${{ inputs.service_name }}:${{ steps.meta.outputs.tag }}" .
+
+      - name: Save image to disk
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="${IMAGE_OUTPUT_DIR}/${{ inputs.service_name }}_${{ steps.meta.outputs.tag }}.tar"
+          mkdir -p "$IMAGE_OUTPUT_DIR"
+          docker save -o "$archive" "${{ inputs.service_name }}:${{ steps.meta.outputs.tag }}"
+
+      - name: Import into k3s
+        shell: bash
+        run: sudo k3s ctr images import "${IMAGE_OUTPUT_DIR}/${{ inputs.service_name }}_${{ steps.meta.outputs.tag }}.tar"
+
+  deploy:
+    name: Helm deploy
+    runs-on: self-hosted
+    needs: docker
+    if: ${{ inputs.deploy }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout Universal Helm Charts
+        uses: actions/checkout@v4
+        with:
+          repository: AGH-iot-agent/Universal-Kubernetes-Helm-Charts
+          path: .charts
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Deploy
+        shell: bash
+        run: |
+          helm upgrade --install "${{ inputs.service_name }}" \
+            ".charts/charts/${{ inputs.chart_type }}" \
+            --namespace "${{ inputs.namespace }}" \
+            --create-namespace \
+            --wait --timeout 5m \
+            -f "${{ inputs.values_file }}" \
+            --set image.repository="${{ inputs.service_name }}" \
+            --set image.tag="${{ needs.docker.outputs.image_tag }}" \
+            --set image.imagePullPolicy=IfNotPresent
