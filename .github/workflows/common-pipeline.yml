@@ -53,6 +53,7 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ inputs.java_version }}
+          check-latest: false
           cache: maven
 
       - name: Maven build
@@ -94,7 +95,14 @@ jobs:
 
       - name: Build image
         shell: bash
-        run: docker build -t "${{ inputs.service_name }}:${{ steps.meta.outputs.tag }}" .
+        run: |
+          set -euo pipefail
+          if docker buildx version >/dev/null 2>&1; then
+            docker build -t "${{ inputs.service_name }}:${{ steps.meta.outputs.tag }}" .
+          else
+            echo "buildx is unavailable on runner; falling back to classic docker build"
+            DOCKER_BUILDKIT=0 docker build -t "${{ inputs.service_name }}:${{ steps.meta.outputs.tag }}" .
+          fi
 
       - name: Save image to disk
         shell: bash
