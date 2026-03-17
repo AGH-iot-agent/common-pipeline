@@ -37,7 +37,7 @@ on:
 
 env:
   DOCKER_BUILDKIT: "1"
-  IMAGE_OUTPUT_DIR: /var/lib/iot-agent/images
+  IMAGE_OUTPUT_DIR: /mnt/storage/iot-agent/images
   KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
 jobs:
