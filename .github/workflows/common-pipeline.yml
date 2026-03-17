@@ -157,7 +157,7 @@ jobs:
             --namespace "${{ inputs.namespace }}" \
             --create-namespace \
             --wait --timeout 5m \
-            -f "${{ inputs.values_file }}" \
+            -f "values-${{ inputs.values_file }}" \
             --set image.repository="${{ inputs.service_name }}" \
             --set image.tag="${{ needs.docker.outputs.image_tag }}" \
             --set image.imagePullPolicy=IfNotPresent
