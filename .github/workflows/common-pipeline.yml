@@ -13,7 +13,7 @@ on:
       values_file:
         required: false
         type: string
-        default: Helm/dev.yaml
+        default: Helm/values-dev.yaml
       chart_type:
         required: false
         type: string
@@ -157,7 +157,7 @@ jobs:
             --namespace "${{ inputs.namespace }}" \
             --create-namespace \
             --wait --timeout 5m \
-            -f "values-${{ inputs.values_file }}" \
+            -f "${{ inputs.values_file }}" \
             --set image.repository="${{ inputs.service_name }}" \
             --set image.tag="${{ needs.docker.outputs.image_tag }}" \
             --set image.imagePullPolicy=IfNotPresent
