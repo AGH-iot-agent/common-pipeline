@@ -149,6 +149,28 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v4
 
+      - name: Normalize shared chart templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          chart_templates_dir=".charts/charts/${{ inputs.chart_type }}/templates"
+          root_templates_dir=".charts/templates"
+
+          shopt -s nullglob
+          for f in "$chart_templates_dir"/*; do
+            [[ -f "$f" ]] || continue
+            target="$(tr -d '\r' < "$f")"
+            if [[ "$target" =~ ^\.\./\.\./\.\./templates/([A-Za-z0-9._-]+)$ ]]; then
+              src="$root_templates_dir/${BASH_REMATCH[1]}"
+              if [[ -f "$src" ]]; then
+                cp "$src" "$f"
+              else
+                echo "Missing shared template source: $src" >&2
+                exit 1
+              fi
+            fi
+          done
+
       - name: Deploy
         shell: bash
         run: |
