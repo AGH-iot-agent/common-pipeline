@@ -77,7 +77,7 @@ jobs:
           if command -v k3s >/dev/null; then
             $SUDO k3s ctr images import "$ARCHIVE"
           elif command -v ctr >/dev/null; then
-            $SUDO ctr -n k8s.io images import "$ARCHIVE"
+            $SUDO ctr --address /run/k3s/containerd/containerd.sock -n k8s.io images import "$ARCHIVE"
           else
             echo "k3s/ctr not found"
           fi
