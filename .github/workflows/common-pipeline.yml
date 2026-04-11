@@ -89,6 +89,7 @@ jobs:
         needs: [docker]
         if: inputs.deploy && !failure()        
         uses: ./.github/workflows/helm.yml
+        secrets: inherit
         with:
             service_name: ${{ inputs.service_name }}
             release_name: ${{ inputs.service_name }}
