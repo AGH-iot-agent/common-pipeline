@@ -55,7 +55,7 @@ env:
 
 jobs:
     build:
-        runs-on: self-hosted
+        runs-on: [self-hosted, iot-agent-local]
 
         steps:
         - uses: actions/checkout@v4

@@ -27,7 +27,7 @@ on:
 
 jobs:
   docker:
-    runs-on: self-hosted
+    runs-on: [self-hosted, iot-agent-local]
 
     steps:
       - name: "[DOCKER] Check out code"
@@ -44,6 +44,19 @@ jobs:
           else
             DOCKER_BUILDKIT=0 docker build -f "${{ inputs.dockerfile }}" -t "$IMAGE" "${{ inputs.docker_context }}"
           fi
+
+      - name: "[DOCKER] Verify storage mount"
+        shell: bash
+        run: |
+          set -euo pipefail
+          MOUNT_DIR="${{ inputs.image_output_dir }}"
+          if ! mkdir -p "${MOUNT_DIR}" || ! touch "${MOUNT_DIR}/.write-test" 2>/dev/null; then
+            echo "ERROR: Cannot write to ${MOUNT_DIR}"
+            echo "Ensure /mnt/storage/iot-agent is bind-mounted in the runner container"
+            exit 1
+          fi
+          rm -f "${MOUNT_DIR}/.write-test"
+          echo "Storage mount OK: ${MOUNT_DIR}"
 
       - name: "[DOCKER] Save image"
         if: ${{ inputs.store_image_locally }}
@@ -69,7 +82,15 @@ jobs:
           ARCHIVE="${ARCHIVE_DIR}/$(echo "$IMAGE" | tr '/:' '__').tar"
 
           if [[ ! -f "$ARCHIVE" ]]; then
-            echo "Missing archive: $ARCHIVE"
+            echo "ERROR: Missing archive: $ARCHIVE"
+            ls -lah "$ARCHIVE_DIR" 2>/dev/null || echo "Directory does not exist: $ARCHIVE_DIR"
+            exit 1
+          fi
+
+          K3S_SOCK="/run/k3s/containerd/containerd.sock"
+          if [[ ! -S "$K3S_SOCK" ]]; then
+            echo "ERROR: k3s containerd socket not found at $K3S_SOCK"
+            echo "Ensure /run/k3s is bind-mounted in the runner container"
             exit 1
           fi
 
@@ -79,7 +100,11 @@ jobs:
           if command -v k3s >/dev/null; then
             $SUDO k3s ctr images import "$ARCHIVE"
           elif command -v ctr >/dev/null; then
-            $SUDO ctr --address /run/k3s/containerd/containerd.sock -n k8s.io images import "$ARCHIVE"
+            $SUDO ctr --address "$K3S_SOCK" -n k8s.io images import "$ARCHIVE"
           else
-            echo "k3s/ctr not found"
+            echo "ERROR: Neither k3s nor ctr binary found in PATH"
+            echo "Install containerd.io package in the runner image or mount /usr/bin/ctr from the host"
+            exit 1
           fi
+
+          echo "Image imported to k3s: $IMAGE"

@@ -33,7 +33,7 @@ on:
 
 jobs:
   deploy:
-    runs-on: self-hosted
+    runs-on: [self-hosted, iot-agent-local]
 
     steps:
       - name: "[HELM] Check out code"
@@ -48,6 +48,29 @@ jobs:
 
       - name: "[HELM] Set up Helm"
         uses: azure/setup-helm@v4
+
+      - name: "[HELM] Verify storage mount and kubeconfig"
+        shell: bash
+        env:
+          KUBECONFIG: ${{ inputs.kubeconfig }}
+        run: |
+          set -euo pipefail
+          STORAGE="/mnt/storage/iot-agent/helm-charts"
+
+          if ! mkdir -p "$STORAGE" || ! touch "${STORAGE}/.write-test" 2>/dev/null; then
+            echo "ERROR: Cannot write to $STORAGE"
+            echo "Ensure /mnt/storage/iot-agent is bind-mounted in the runner container"
+            exit 1
+          fi
+          rm -f "${STORAGE}/.write-test"
+          echo "Storage mount OK: $STORAGE"
+
+          if [[ ! -f "$KUBECONFIG" ]]; then
+            echo "ERROR: KUBECONFIG not found at $KUBECONFIG"
+            echo "Ensure /etc/rancher/k3s is bind-mounted in the runner container"
+            exit 1
+          fi
+          echo "KUBECONFIG OK: $KUBECONFIG"
 
       - name: "[HELM] Materialize chart helper symlinks"
         shell: bash
@@ -75,13 +98,21 @@ jobs:
           CHART_DIR=".charts/charts/${{ inputs.chart_type }}"
           PACKAGE_DIR="/mnt/storage/iot-agent/helm-charts/${{ inputs.service_name }}"
 
-          [[ -d "$CHART_DIR" ]] || { echo "Missing chart: $CHART_DIR"; exit 1; }
+          [[ -d "$CHART_DIR" ]] || { echo "ERROR: Missing chart dir: $CHART_DIR"; ls -la .charts/charts/ 2>/dev/null; exit 1; }
 
           mkdir -p "$PACKAGE_DIR"
           helm dependency update "$CHART_DIR" >/dev/null 2>&1 || true
           helm package "$CHART_DIR" --destination "$PACKAGE_DIR"
 
+          echo "Packaged chart contents:"
           ls -lah "$PACKAGE_DIR"
+
+          CHART_FILE="$(find "$PACKAGE_DIR" -maxdepth 1 -type f -name '${{ inputs.chart_type }}-*.tgz' | head -1)"
+          if [[ -z "$CHART_FILE" ]]; then
+            echo "ERROR: helm package succeeded but no .tgz file found matching '${{ inputs.chart_type }}-*.tgz'"
+            exit 1
+          fi
+          echo "Chart file ready: $CHART_FILE"
 
       - name: "[HELM] Deploy"
         shell: bash
@@ -93,8 +124,8 @@ jobs:
           PACKAGE_DIR="/mnt/storage/iot-agent/helm-charts/${{ inputs.service_name }}"
           CHART="$(find "$PACKAGE_DIR" -maxdepth 1 -type f -name '${{ inputs.chart_type }}-*.tgz' | sort | tail -n 1)"
 
-          [[ -n "$CHART" && -f "$CHART" ]] || { echo "Missing packaged chart in: $PACKAGE_DIR"; exit 1; }
-          [[ -f "${{ inputs.values_file }}" ]] || { echo "Missing values file"; exit 1; }
+          [[ -n "$CHART" && -f "$CHART" ]] || { echo "ERROR: Missing packaged chart in: $PACKAGE_DIR"; ls -lah "$PACKAGE_DIR" 2>/dev/null; exit 1; }
+          [[ -f "${{ inputs.values_file }}" ]] || { echo "ERROR: Missing values file: ${{ inputs.values_file }}"; ls -la Helm/ 2>/dev/null; exit 1; }
 
           helm upgrade --install "${{ inputs.release_name }}" "$CHART" \
             --namespace "${{ inputs.namespace }}" \
