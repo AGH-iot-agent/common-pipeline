@@ -53,12 +53,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          YQ_BIN="/usr/local/bin/yq"
+          YQ_BIN="$HOME/.local/bin/yq"
+          mkdir -p "$HOME/.local/bin"
           if ! command -v yq >/dev/null 2>&1; then
             curl -fsSL "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64" -o "$YQ_BIN"
             chmod +x "$YQ_BIN"
+            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           fi
-          yq --version
+          "$YQ_BIN" --version
 
       - name: "[HELM] Verify storage mount and kubeconfig"
         shell: bash
@@ -88,17 +90,33 @@ jobs:
         run: |
           set -euo pipefail
 
-          find .charts/charts -type l -name '_helpers.tpl' | while read -r helper_link; do
-            resolved_target="$(readlink -f "$helper_link")"
+          find .charts/charts -type f \( -name '*.yaml' -o -name '_helpers.tpl' \) | while read -r template_file; do
+            file_content="$(tr -d '\r' < "$template_file")"
+
+            if [[ "$file_content" =~ ^\.\./\.\./\.\./templates/.+ ]]; then
+              resolved_target="$(readlink -f "$(dirname "$template_file")/$file_content")"
+
+              if [[ -z "$resolved_target" || ! -f "$resolved_target" ]]; then
+                echo "Broken template pointer: $template_file -> $file_content"
+                exit 1
+              fi
+
+              cp "$resolved_target" "$template_file"
+              echo "Materialized pointer file: $template_file"
+            fi
+          done
+
+          find .charts/charts -type l | while read -r template_link; do
+            resolved_target="$(readlink -f "$template_link")"
 
             if [[ -z "$resolved_target" || ! -f "$resolved_target" ]]; then
-              echo "Broken helper symlink: $helper_link"
+              echo "Broken template symlink: $template_link"
               exit 1
             fi
 
-            rm "$helper_link"
-            cp "$resolved_target" "$helper_link"
-            echo "Materialized helper: $helper_link"
+            rm "$template_link"
+            cp "$resolved_target" "$template_link"
+            echo "Materialized symlink: $template_link"
           done
 
       - name: "[HELM] Merge default and service values"
