@@ -35,7 +35,7 @@ runs:
         distribution: ${{ inputs.distribution }}
         java-version: ${{ inputs.java_version }}
         check-latest: ${{ inputs.check_latest }}
-        cache: ${{ inputs.cache }}
+        cache:        ${{ inputs.cache }}
 
     - name: "[MAVEN] Build Maven project"
       shell: bash

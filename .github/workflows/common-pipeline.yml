@@ -62,13 +62,13 @@ jobs:
 
         - name: Maven Build
           if: inputs.project_type == 'maven'
-          uses: ./.github/actions/maven-build
+          uses: AGH-iot-agent/common-pipeline/.github/actions/maven-build@feat/IOTAG-01-common-pipeline
           with:
             java_version: ${{ inputs.java_version }}
 
         - name: Node Build
           if: inputs.project_type == 'node'
-          uses: ./.github/actions/node-build
+          uses: AGH-iot-agent/common-pipeline/.github/actions/node-build@feat/IOTAG-01-common-pipeline
           with:
             node_version: ${{ inputs.node_version }}
 
