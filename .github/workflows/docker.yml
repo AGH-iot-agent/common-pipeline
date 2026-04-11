@@ -1,0 +1,83 @@
+name: docker build
+
+on:
+  workflow_call:
+    inputs:
+      image_repository:
+        required: true
+        type: string
+      image_tag:
+        required: true
+        type: string
+      docker_context:
+        type: string
+        default: .
+      dockerfile:
+        type: string
+        default: Dockerfile
+      image_output_dir:
+        type: string
+        default: /var/lib/iot-agent/images
+      store_image_locally:
+        type: boolean
+        default: true
+      import_to_k3s:
+        type: boolean
+        default: true
+
+jobs:
+  docker:
+    runs-on: self-hosted
+
+    steps:
+      - name: "[DOCKER] Check out code"
+        uses: actions/checkout@v4
+
+      - name: "[DOCKER] Build image"
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE="${{ inputs.image_repository }}:${{ inputs.image_tag }}"
+
+          if docker buildx version >/dev/null 2>&1; then
+            docker build -f "${{ inputs.dockerfile }}" -t "$IMAGE" "${{ inputs.docker_context }}"
+          else
+            DOCKER_BUILDKIT=0 docker build -f "${{ inputs.dockerfile }}" -t "$IMAGE" "${{ inputs.docker_context }}"
+          fi
+
+      - name: "[DOCKER] Save image"
+        if: ${{ inputs.store_image_locally }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE="${{ inputs.image_repository }}:${{ inputs.image_tag }}"
+          ARCHIVE="${{ inputs.image_output_dir }}/$(echo "$IMAGE" | tr '/:' '__').tar"
+
+          mkdir -p "${{ inputs.image_output_dir }}"
+          docker save -o "$ARCHIVE" "$IMAGE"
+
+          echo "Saved: $ARCHIVE"
+
+      - name: "[DOCKER] Import to k3s"
+        if: ${{ inputs.import_to_k3s }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE="${{ inputs.image_repository }}:${{ inputs.image_tag }}"
+          ARCHIVE="${{ inputs.image_output_dir }}/$(echo "$IMAGE" | tr '/:' '__').tar"
+
+          if [[ ! -f "$ARCHIVE" ]]; then
+            echo "Missing archive: $ARCHIVE"
+            exit 1
+          fi
+
+          SUDO=""
+          command -v sudo >/dev/null && SUDO="sudo"
+
+          if command -v k3s >/dev/null; then
+            $SUDO k3s ctr images import "$ARCHIVE"
+          elif command -v ctr >/dev/null; then
+            $SUDO ctr -n k8s.io images import "$ARCHIVE"
+          else
+            echo "k3s/ctr not found"
+          fi

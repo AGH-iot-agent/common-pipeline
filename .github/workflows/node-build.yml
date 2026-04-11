@@ -1,4 +1,4 @@
-name: node build
+name: Node
 
 on:
   workflow_call:
@@ -19,6 +19,10 @@ on:
         required: false
         type: string
         default: .
+      cache:
+        required: false        
+        type: string
+        default: "npm"
 
 jobs:
   build:
@@ -27,23 +31,23 @@ jobs:
       run:
         working-directory: ${{ inputs.working_directory }}
     steps:
-      - name: Check out code
+      - name: [NODE] Check out code
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: [NODE] Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node_version }}
-          cache: npm
+          cache: ${{ inputs.cache }}
           cache-dependency-path: ${{ inputs.working_directory }}/package-lock.json
 
-      - name: Install dependencies
+      - name: [NODE] Install dependencies
         shell: bash
         run: |
           set -euo pipefail
           ${{ inputs.install_command }}
 
-      - name: Build Node project
+      - name: [NODE] Build Node project
         shell: bash
         run: |
           set -euo pipefail

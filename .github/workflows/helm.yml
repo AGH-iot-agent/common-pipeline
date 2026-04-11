@@ -1,0 +1,67 @@
+name: helm deploy
+
+on:
+  workflow_call:
+    inputs:
+      service_name:
+        type: string
+        required: true
+      release_name:
+        type: string
+        required: true
+      namespace:
+        type: string
+        required: true
+      chart_type:
+        type: string
+        required: true
+      values_file:
+        type: string
+        required: true
+      image_repository:
+        type: string
+        required: true
+      image_tag:
+        type: string
+        required: true
+      kubeconfig:
+        type: string
+        default: /etc/rancher/k3s/k3s.yaml
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    steps:
+      - name: "[HELM] Check out code"
+        uses: actions/checkout@v4
+
+      - name: "[HELM] Checkout Helm charts"
+        uses: actions/checkout@v4
+        with:
+          repository: AGH-iot-agent/Universal-Kubernetes-Helm-Charts
+          path: .charts
+
+      - name: "[HELM] Set up Helm"
+        uses: azure/setup-helm@v4
+
+      - name: "[HELM] Deploy"
+        shell: bash
+        env:
+          KUBECONFIG: ${{ inputs.kubeconfig }}
+        run: |
+          set -euo pipefail
+
+          CHART=".charts/charts/${{ inputs.chart_type }}"
+
+          [[ -d "$CHART" ]] || { echo "Missing chart: $CHART"; exit 1; }
+          [[ -f "${{ inputs.values_file }}" ]] || { echo "Missing values file"; exit 1; }
+
+          helm upgrade --install "${{ inputs.release_name }}" "$CHART" \
+            --namespace "${{ inputs.namespace }}" \
+            --create-namespace \
+            --wait --timeout 5m \
+            -f "${{ inputs.values_file }}" \
+            --set name="${{ inputs.service_name }}" \
+            --set image.repository="${{ inputs.image_repository }}" \
+            --set image.tag="${{ inputs.image_tag }}"
