@@ -1,0 +1,47 @@
+name: Node Build
+description: Builds a Node.js project
+
+inputs:
+  node_version:
+    required: false
+    default: "20"
+  install_command:
+    required: false
+    default: "npm ci"
+  build_command:
+    required: false
+    default: "npm run build"
+  working_directory:
+    required: false
+    default: "."
+  cache:
+    required: false
+    default: "npm"
+
+runs:
+  using: composite
+
+  steps:
+    - name: "[NODE] Check out code"
+      uses: actions/checkout@v4
+
+    - name: "[NODE] Set up Node.js"
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node_version }}
+        cache: ${{ inputs.cache }}
+        cache-dependency-path: ${{ inputs.working_directory }}/package-lock.json
+
+    - name: "[NODE] Install dependencies"
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        set -euo pipefail
+        ${{ inputs.install_command }}
+
+    - name: "[NODE] Build project"
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        set -euo pipefail
+        ${{ inputs.build_command }}

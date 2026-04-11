@@ -62,13 +62,13 @@ jobs:
 
         - name: Maven Build
           if: inputs.project_type == 'maven'
-          uses: ./.github/workflows/maven-build.yml
+          uses: ./.github/actions/maven-build
           with:
             java_version: ${{ inputs.java_version }}
 
         - name: Node Build
           if: inputs.project_type == 'node'
-          uses: ./.github/workflows/node-build.yml
+          uses: ./.github/actions/node-build
           with:
             node_version: ${{ inputs.node_version }}
 

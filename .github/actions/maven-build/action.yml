@@ -1,0 +1,49 @@
+name: Maven Build
+description: Builds a Maven project
+
+inputs:
+  java_version:
+    required: false
+    default: "21"
+  maven_args:
+    required: false
+    default: "-B clean package -DskipTests"
+  working_directory:
+    required: false
+    default: "."
+  cache:
+    required: false
+    default: "maven"
+  distribution:
+    required: false
+    default: "temurin"
+  check_latest:
+    required: false
+    type: boolean
+    default: false
+
+runs:
+  using: composite
+
+  steps:
+    - name: "[MAVEN] Check out code"
+      uses: actions/checkout@v4
+
+    - name: "[MAVEN] Set up JDK"
+      uses: actions/setup-java@v4
+      with:
+        distribution: ${{ inputs.distribution }}
+        java-version: ${{ inputs.java_version }}
+        check-latest: ${{ inputs.check_latest }}
+        cache: ${{ inputs.cache }}
+
+    - name: "[MAVEN] Build Maven project"
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        set -euo pipefail
+        if [[ -f ./mvnw ]]; then
+          chmod +x ./mvnw && ./mvnw ${{ inputs.maven_args }}
+        else
+          mvn ${{ inputs.maven_args }}
+        fi
