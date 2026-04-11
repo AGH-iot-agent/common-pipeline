@@ -1,98 +1,98 @@
 name: "[COMMON-PIPELINE] Common Pipeline"
 
 on:
-  workflow_call:
-    inputs:
-      service_name:
-        required: true
-        type: string
-      project_type:
-        required: true
-        type: string
-      values_file:
-        required: false
-        type: string
-        default: Helm/values-dev.yaml
-      chart_type:
-        required: false
-        type: string
-        default: deployment
-      namespace:
-        required: false
-        type: string
-        default: iot-agent
-      java_version:
-        required: false
-        type: string
-        default: "21"
-      node_version:
-        required: false
-        type: string
-        default: "20"
-      deploy:
-        required: false
-        type: boolean
-        default: true
-      docker_build:
-        required: false
-        type: boolean
-        default: true
-      deploy_build:
-        required: false
-        type: boolean
-        default: true
-      image_output_dir:
-        type: string
-        default: /var/lib/iot-agent/images
-    secrets:
-      charts_repo_token:
-        required: false
+    workflow_call:
+        inputs:
+            service_name:
+                required: true
+                type: string
+            project_type:
+                required: true
+                type: string
+            values_file:
+                required: false
+                type: string
+                default: Helm/values-dev.yaml
+            chart_type:
+                required: false
+                type: string
+                default: deployment
+            namespace:
+                required: false
+                type: string
+                default: iot-agent
+            java_version:
+                required: false
+                type: string
+                default: "21"
+            node_version:
+                required: false
+                type: string
+                default: "20"
+            deploy:
+                required: false
+                type: boolean
+                default: true
+            docker_build:
+                required: false
+                type: boolean
+                default: true
+            deploy_build:
+                required: false
+                type: boolean
+                default: true
+            image_output_dir:
+                type: string
+                default: /var/lib/iot-agent/images
+        secrets:
+            charts_repo_token:
+                required: false
 
 env:
-  DOCKER_BUILDKIT: "1"
-  IMAGE_OUTPUT_DIR: ${{ inputs.image_output_dir }}
-  KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+    DOCKER_BUILDKIT: "1"
+    IMAGE_OUTPUT_DIR: ${{ inputs.image_output_dir }}
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
 jobs:
-  maven:
-    if: inputs.project_type == 'maven'
-    uses: ./.github/workflows/maven-build.yml
-    with:
-      java_version: "21"
-      maven_args: "-B clean package -DskipTests"
-      cache: "maven"
-      distribution: "temurin"
-      check_latest: false
+    maven:
+        if: inputs.project_type == 'maven'
+        uses: ./.github/workflows/maven-build.yml
+        with:
+            java_version: "21"
+            maven_args: "-B clean package -DskipTests"
+            cache: "maven"
+            distribution: "temurin"
+            check_latest: false
 
-  node:
-    if: inputs.project_type == 'node'
-    uses: ./.github/workflows/node-build.yml
-    with:
-      node_version: "20"
-      cache: "npm"
+    node:
+        if: inputs.project_type == 'node'
+        uses: ./.github/workflows/node-build.yml
+        with:
+            node_version: "20"
+            cache: "npm"
 
-  docker:
-    if: inputs.docker_build
-    uses: ./.github/workflows/docker.yml
-    with:
-      image_repository: ${{ inputs.service_name }}
-      image_tag: ${{ github.sha }}
-      docker_context: .
-      dockerfile: Dockerfile
-      image_output_dir: ${{ inputs.image_output_dir }}
-      store_image_locally: true
-      import_to_k3s: true
+    docker:
+        if: inputs.docker_build
+        uses: ./.github/workflows/docker.yml
+        with:
+            image_repository: ${{ inputs.service_name }}
+            image_tag: ${{ github.sha }}
+            docker_context: .
+            dockerfile: Dockerfile
+            image_output_dir: ${{ inputs.image_output_dir }}
+            store_image_locally: true
+            import_to_k3s: true
+        
+    deploy:
+        if: inputs.deploy
+        uses: ./.github/workflows/helm.yml
+        with:
+            service_name: ${{ inputs.service_name }}
+            release_name: ${{ inputs.service_name }}
+            namespace: ${{ inputs.namespace }}
+            chart_type: ${{ inputs.chart_type }}
+            values_file: ${{ inputs.values_file }}
+            image_repository: ${{ inputs.service_name }}
+            image_tag: ${{ github.sha }}
     
-  deploy:
-    if: inputs.deploy
-    uses: ./.github/workflows/helm.yml
-    with:
-      service_name: ${{ inputs.service_name }}
-      release_name: ${{ inputs.service_name }}
-      namespace: ${{ inputs.namespace }}
-      chart_type: ${{ inputs.chart_type }}
-      values_file: ${{ inputs.values_file }}
-      image_repository: ${{ inputs.service_name }}
-      image_tag: ${{ github.sha }}
-  
-  
+    

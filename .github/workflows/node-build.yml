@@ -31,23 +31,23 @@ jobs:
       run:
         working-directory: ${{ inputs.working_directory }}
     steps:
-      - name: [NODE] Check out code
+      - name: "[NODE] Check out code"
         uses: actions/checkout@v4
 
-      - name: [NODE] Set up Node.js
+      - name: "[NODE] Set up Node.js"
         uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node_version }}
           cache: ${{ inputs.cache }}
           cache-dependency-path: ${{ inputs.working_directory }}/package-lock.json
 
-      - name: [NODE] Install dependencies
+      - name: "[NODE] Install dependencies"
         shell: bash
         run: |
           set -euo pipefail
           ${{ inputs.install_command }}
 
-      - name: [NODE] Build Node project
+      - name: "[NODE] Build Node project"
         shell: bash
         run: |
           set -euo pipefail
