@@ -43,7 +43,7 @@ on:
                 default: true
             image_output_dir:
                 type: string
-                default: /var/lib/iot-agent/images
+                default: /mnt/storage/iot-agent/docker-local
         secrets:
             charts_repo_token:
                 required: false

@@ -17,7 +17,7 @@ on:
         default: Dockerfile
       image_output_dir:
         type: string
-        default: /var/lib/iot-agent/images
+        default: /mnt/storage/iot-agent/docker-local
       store_image_locally:
         type: boolean
         default: true
@@ -51,9 +51,10 @@ jobs:
         run: |
           set -euo pipefail
           IMAGE="${{ inputs.image_repository }}:${{ inputs.image_tag }}"
-          ARCHIVE="${{ inputs.image_output_dir }}/$(echo "$IMAGE" | tr '/:' '__').tar"
+          ARCHIVE_DIR="${{ inputs.image_output_dir }}/${{ inputs.image_repository }}"
+          ARCHIVE="${ARCHIVE_DIR}/$(echo "$IMAGE" | tr '/:' '__').tar"
 
-          mkdir -p "${{ inputs.image_output_dir }}"
+          mkdir -p "$ARCHIVE_DIR"
           docker save -o "$ARCHIVE" "$IMAGE"
 
           echo "Saved: $ARCHIVE"
@@ -64,7 +65,8 @@ jobs:
         run: |
           set -euo pipefail
           IMAGE="${{ inputs.image_repository }}:${{ inputs.image_tag }}"
-          ARCHIVE="${{ inputs.image_output_dir }}/$(echo "$IMAGE" | tr '/:' '__').tar"
+          ARCHIVE_DIR="${{ inputs.image_output_dir }}/${{ inputs.image_repository }}"
+          ARCHIVE="${ARCHIVE_DIR}/$(echo "$IMAGE" | tr '/:' '__').tar"
 
           if [[ ! -f "$ARCHIVE" ]]; then
             echo "Missing archive: $ARCHIVE"
