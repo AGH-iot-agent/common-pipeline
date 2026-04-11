@@ -72,7 +72,10 @@ jobs:
             cache: "npm"
 
     docker:
-        if: inputs.docker_build
+        if: >
+          inputs.docker_build &&
+          (needs.maven.result == 'success' || needs.maven.result == 'skipped' || needs.maven.result == 'cancelled') &&
+          (needs.node.result == 'success' || needs.node.result == 'skipped' || needs.node.result == 'cancelled')
         uses: ./.github/workflows/docker.yml
         with:
             image_repository: ${{ inputs.service_name }}
@@ -84,7 +87,8 @@ jobs:
             import_to_k3s: true
         
     deploy:
-        if: inputs.deploy
+        needs: [docker]
+        if: inputs.deploy && (needs.docker.result == 'success' || needs.docker.result == 'skipped')
         uses: ./.github/workflows/helm.yml
         with:
             service_name: ${{ inputs.service_name }}
