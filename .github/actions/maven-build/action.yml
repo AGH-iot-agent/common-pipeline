@@ -29,13 +29,13 @@ runs:
     - name: "[MAVEN] Check out code"
       uses: actions/checkout@v4
 
-    - name: "[MAVEN] Set up JDK"
-      uses: actions/setup-java@v4
-      with:
-        distribution: ${{ inputs.distribution }}
-        java-version: ${{ inputs.java_version }}
-        check-latest: ${{ inputs.check_latest }}
-        cache:        ${{ inputs.cache }}
+    # - name: "[MAVEN] Set up JDK"
+    #   uses: actions/setup-java@v4
+    #   with:
+    #     distribution: ${{ inputs.distribution }}
+    #     java-version: ${{ inputs.java_version }}
+    #     check-latest: ${{ inputs.check_latest }}
+    #     cache:        ${{ inputs.cache }}
 
     - name: "[MAVEN] Build Maven project"
       shell: bash
