@@ -60,22 +60,17 @@ jobs:
         steps:
         - uses: actions/checkout@v4
 
-        - name: "Maven Build"
+        - name: Maven Build
           if: inputs.project_type == 'maven'
           uses: ./.github/workflows/maven-build.yml
           with:
-            java_version: "21"
-            maven_args: "-B clean package -DskipTests"
-            cache: "maven"
-            distribution: "temurin"
-            check_latest: false
+            java_version: ${{ inputs.java_version }}
 
-        - name: "Node Build"
+        - name: Node Build
           if: inputs.project_type == 'node'
           uses: ./.github/workflows/node-build.yml
           with:
-            node_version: "20"
-            cache: "npm"
+            node_version: ${{ inputs.node_version }}
 
     docker:
         needs: build
@@ -91,8 +86,8 @@ jobs:
             import_to_k3s: true
         
     deploy:
-        needs: docker
-        if: inputs.deploy && !failure()
+        needs: [docker]
+        if: inputs.deploy && !failure()        
         uses: ./.github/workflows/helm.yml
         with:
             service_name: ${{ inputs.service_name }}
