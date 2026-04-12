@@ -37,7 +37,17 @@ runs:
       working-directory: ${{ inputs.working_directory }}
       run: |
         set -euo pipefail
-        ${{ inputs.install_command }}
+        INSTALL_CMD="${{ inputs.install_command }}"
+        if [[ "$INSTALL_CMD" == "npm ci" ]]; then
+          if [[ -f package-lock.json || -f npm-shrinkwrap.json ]]; then
+            npm ci
+          else
+            echo "[NODE] package-lock.json not found, falling back to npm install"
+            npm install
+          fi
+        else
+          $INSTALL_CMD
+        fi
 
     - name: "[NODE] Build project"
       shell: bash
