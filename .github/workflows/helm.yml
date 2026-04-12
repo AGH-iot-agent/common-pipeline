@@ -24,6 +24,9 @@ on:
       image_tag:
         type: string
         required: true
+      force_rollout:
+        type: boolean
+        default: false
       kubeconfig:
         type: string
         default: /etc/rancher/k3s/k3s.yaml
@@ -168,10 +171,34 @@ jobs:
 
           PACKAGE_DIR="/mnt/storage/iot-agent/helm-charts/${{ inputs.service_name }}"
           CHART="$(find "$PACKAGE_DIR" -maxdepth 1 -type f -name '${{ inputs.chart_type }}-*.tgz' | sort | tail -n 1)"
+          TARGET_IMAGE="${{ inputs.image_repository }}:${{ inputs.image_tag }}"
+          DEPLOYMENT_NAME="${{ inputs.service_name }}"
+          FORCE_ROLLOUT="${{ inputs.force_rollout }}"
+          CURRENT_IMAGE=""
 
           [[ -n "$CHART" && -f "$CHART" ]] || { echo "ERROR: Missing packaged chart in: $PACKAGE_DIR"; ls -lah "$PACKAGE_DIR" 2>/dev/null; exit 1; }
+
+          if kubectl get deployment "$DEPLOYMENT_NAME" -n "${{ inputs.namespace }}" >/dev/null 2>&1; then
+            CURRENT_IMAGE="$(kubectl get deployment "$DEPLOYMENT_NAME" -n "${{ inputs.namespace }}" -o jsonpath='{.spec.template.spec.containers[0].image}')"
+            echo "Current deployment image: $CURRENT_IMAGE"
+          else
+            echo "Deployment $DEPLOYMENT_NAME does not exist yet in namespace ${{ inputs.namespace }}"
+          fi
+
+          echo "Target deployment image: $TARGET_IMAGE"
+          if [[ -n "$CURRENT_IMAGE" && "$CURRENT_IMAGE" == "$TARGET_IMAGE" ]]; then
+            echo "No-op rollout expected: target image matches currently deployed image."
+          fi
 
           helm upgrade --install "${{ inputs.release_name }}" "$CHART" \
             --namespace "${{ inputs.namespace }}" \
             --create-namespace \
+            --set image.repository="${{ inputs.image_repository }}" \
+            --set image.tag="${{ inputs.image_tag }}" \
             --wait --timeout 5m
+
+          if [[ "$FORCE_ROLLOUT" == "true" ]]; then
+            echo "Force rollout enabled. Restarting deployment $DEPLOYMENT_NAME"
+            kubectl rollout restart deployment "$DEPLOYMENT_NAME" -n "${{ inputs.namespace }}"
+            kubectl rollout status deployment "$DEPLOYMENT_NAME" -n "${{ inputs.namespace }}" --timeout=5m
+          fi

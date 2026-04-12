@@ -41,6 +41,10 @@ on:
                 required: false
                 type: boolean
                 default: true
+            force_rollout:
+                required: false
+                type: boolean
+                default: false
             image_output_dir:
                 type: string
                 default: /mnt/storage/iot-agent/docker-local
@@ -98,5 +102,6 @@ jobs:
             values_file: ${{ inputs.values_file }}
             image_repository: ${{ inputs.service_name }}
             image_tag: ${{ github.sha }}
+            force_rollout: ${{ inputs.force_rollout }}
     
     
