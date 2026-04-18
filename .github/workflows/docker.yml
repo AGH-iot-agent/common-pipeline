@@ -98,9 +98,11 @@ jobs:
           command -v sudo >/dev/null && SUDO="sudo"
 
           if command -v k3s >/dev/null; then
-            $SUDO k3s ctr images import "$ARCHIVE"
+            $SUDO "$(command -v k3s)" ctr images import "$ARCHIVE"
           elif command -v ctr >/dev/null; then
-            $SUDO ctr --address "$K3S_SOCK" -n k8s.io images import "$ARCHIVE"
+            $SUDO "$(command -v ctr)" --address "$K3S_SOCK" -n k8s.io images import "$ARCHIVE"
+          elif [[ -x /usr/local/bin/k3s ]]; then
+            $SUDO /usr/local/bin/k3s ctr images import "$ARCHIVE"
           else
             echo "ERROR: Neither k3s nor ctr binary found in PATH"
             echo "Install containerd.io package in the runner image or mount /usr/bin/ctr from the host"

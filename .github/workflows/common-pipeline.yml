@@ -6,6 +6,14 @@ on:
             service_name:
                 required: true
                 type: string
+            image_repository:
+                required: false
+                type: string
+                default: ""
+            image_tag:
+                required: false
+                type: string
+                default: ""
             project_type:
                 required: true
                 type: string
@@ -81,8 +89,8 @@ jobs:
         if: inputs.docker_build && !failure()
         uses: ./.github/workflows/docker.yml
         with:
-            image_repository: ${{ inputs.service_name }}
-            image_tag: ${{ github.sha }}
+            image_repository: ${{ inputs.image_repository != '' && inputs.image_repository || inputs.service_name }}
+            image_tag: ${{ inputs.image_tag != '' && inputs.image_tag || github.sha }}
             docker_context: .
             dockerfile: Dockerfile
             image_output_dir: ${{ inputs.image_output_dir }}
@@ -100,8 +108,8 @@ jobs:
             namespace: ${{ inputs.namespace }}
             chart_type: ${{ inputs.chart_type }}
             values_file: ${{ inputs.values_file }}
-            image_repository: ${{ inputs.service_name }}
-            image_tag: ${{ github.sha }}
+            image_repository: ${{ inputs.image_repository != '' && inputs.image_repository || inputs.service_name }}
+            image_tag: ${{ inputs.image_tag != '' && inputs.image_tag || github.sha }}
             force_rollout: ${{ inputs.force_rollout }}
     
     
