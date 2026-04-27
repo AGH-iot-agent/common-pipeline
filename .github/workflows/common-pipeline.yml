@@ -1,0 +1,115 @@
+name: "[COMMON-PIPELINE] Common Pipeline"
+
+on:
+    workflow_call:
+        inputs:
+            service_name:
+                required: true
+                type: string
+            image_repository:
+                required: false
+                type: string
+                default: ""
+            image_tag:
+                required: false
+                type: string
+                default: ""
+            project_type:
+                required: true
+                type: string
+            values_file:
+                required: false
+                type: string
+                default: Helm/values-dev.yaml
+            chart_type:
+                required: false
+                type: string
+                default: deployment
+            namespace:
+                required: false
+                type: string
+                default: iot-agent
+            java_version:
+                required: false
+                type: string
+                default: "21"
+            node_version:
+                required: false
+                type: string
+                default: "20"
+            deploy:
+                required: false
+                type: boolean
+                default: true
+            docker_build:
+                required: false
+                type: boolean
+                default: true
+            deploy_build:
+                required: false
+                type: boolean
+                default: true
+            force_rollout:
+                required: false
+                type: boolean
+                default: false
+            image_output_dir:
+                type: string
+                default: /mnt/storage/iot-agent/docker-local
+        secrets:
+            charts_repo_token:
+                required: false
+
+env:
+    DOCKER_BUILDKIT: "1"
+    IMAGE_OUTPUT_DIR: ${{ inputs.image_output_dir }}
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+jobs:
+    build:
+        runs-on: [self-hosted, iot-agent-local]
+
+        steps:
+        - uses: actions/checkout@v4
+
+        - name: Maven Build
+          if: inputs.project_type == 'maven'
+          uses: AGH-iot-agent/common-pipeline/.github/actions/maven-build@feat/IOTAG-01-common-pipeline
+          with:
+            java_version: ${{ inputs.java_version }}
+
+        - name: Node Build
+          if: inputs.project_type == 'node'
+          uses: AGH-iot-agent/common-pipeline/.github/actions/node-build@feat/IOTAG-01-common-pipeline
+          with:
+            node_version: ${{ inputs.node_version }}
+
+    docker:
+        needs: build
+        if: inputs.docker_build && !failure()
+        uses: ./.github/workflows/docker.yml
+        with:
+            image_repository: ${{ inputs.image_repository != '' && inputs.image_repository || inputs.service_name }}
+            image_tag: ${{ inputs.image_tag != '' && inputs.image_tag || github.sha }}
+            docker_context: .
+            dockerfile: Dockerfile
+            image_output_dir: ${{ inputs.image_output_dir }}
+            store_image_locally: true
+            import_to_k3s: true
+        
+    deploy:
+        needs: [docker]
+        if: inputs.deploy && !failure()        
+        uses: ./.github/workflows/helm.yml
+        secrets: inherit
+        with:
+            service_name: ${{ inputs.service_name }}
+            release_name: ${{ inputs.service_name }}
+            namespace: ${{ inputs.namespace }}
+            chart_type: ${{ inputs.chart_type }}
+            values_file: ${{ inputs.values_file }}
+            image_repository: ${{ inputs.image_repository != '' && inputs.image_repository || inputs.service_name }}
+            image_tag: ${{ inputs.image_tag != '' && inputs.image_tag || github.sha }}
+            force_rollout: ${{ inputs.force_rollout }}
+    
+    
